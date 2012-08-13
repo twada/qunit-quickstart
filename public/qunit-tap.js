@@ -1,25 +1,24 @@
 /**
  * QUnit-TAP - A TAP Output Producer Plugin for QUnit
  *
- * http://github.com/twada/qunit-tap
- * version: 1.0.4
+ * https://github.com/twada/qunit-tap
+ * version: 1.1.1
  *
- * Copyright (c) 2010, 2011 Takuto Wada
- * Dual licensed under the MIT (MIT-LICENSE.txt)
- * and GPLv2 (GPL-LICENSE.txt) licenses.
+ * Copyright (c) 2010, 2011, 2012 Takuto Wada
+ * Dual licensed under the MIT or GPL Version 2 licenses.
  *
  * @param qunitObject QUnit object reference.
  * @param printLikeFunction print-like function for TAP output (assumes line-separator is added by this function for each call).
  * @param options configuration options to customize default behavior.
  */
 var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
-    var qunitTapVersion = "1.0.4",
+    var qunitTapVersion = '1.1.1',
         initialCount,
         multipleLoggingCallbacksSupported,
         qu = qunitObject;
 
-    if (typeof qu === 'undefined') {
-        throw new Error('should pass QUnit object reference');
+    if (!qu) {
+        throw new Error('should pass QUnit object reference. Please check QUnit\'s "require" path if you are using Node.js (or any CommonJS env).');
     }
     if (typeof printLikeFunction !== 'function') {
         throw new Error('should pass print-like function');
@@ -29,28 +28,33 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     }
 
     // borrowed from qunit.js
-    var extend = function(a, b) {
+    var extend = function (a, b) {
         var prop;
         for (prop in b) {
-            if (b[prop] === undefined) {
-                delete a[prop];
-            } else {
-                a[prop] = b[prop];
+            if (b.hasOwnProperty(prop)) {
+                if (typeof b[prop] === 'undefined') {
+                    delete a[prop];
+                } else {
+                    a[prop] = b[prop];
+                }
             }
         }
         return a;
     };
 
     // using QUnit.tap as namespace.
-    qu.tap = extend({
-                        count: 0,
-                        noPlan: false,
-                        showDetailsOnFailure: true
-                    }, options);
+    qu.tap = extend(
+        {
+            count: 0,
+            noPlan: false,
+            showDetailsOnFailure: true
+        },
+        options
+    );
     qu.tap.puts = printLikeFunction;
     qu.tap.VERSION = qunitTapVersion;
     initialCount = qu.tap.count || 0;
-    
+
     // detect QUnit's multipleCallbacks feature. see jquery/qunit@34f6bc1
     multipleLoggingCallbacksSupported =
         (typeof qu.config !== 'undefined'
@@ -61,46 +65,84 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
 
     // borrowed from prototype.js
     // not required since QUnit.log receives raw data (details). see jquery/qunit@c2cde34
-    var stripTags = function(str) {
-        if (!str) return str;
+    var stripTags = function (str) {
+        if (!str) {
+            return str;
+        }
         return str.replace(/<\w+(\s+("[^"]*"|'[^']*'|[^>])+)?>|<\/\w+>/gi, '');
     };
 
-    var commentAfterLineEnd = function(str) {
+    var commentAfterLineEnd = function (str) {
         return str.replace(/(\r?\n)/g, '$&# ');
     };
 
-    var formDescription = function(str) {
-        if (!str) return str;
+    var formDescription = function (str) {
+        if (!str) {
+            return str;
+        }
         return commentAfterLineEnd(' - ' + str);
     };
 
-    var appendDetailsTo = function(desc, details) {
-        if (!qu.tap.showDetailsOnFailure || details.result) {
-            return desc;
-        }
-        if (typeof details.expected !== 'undefined') {
-            if (desc) desc += ', ';
-            desc += 'expected: ';
-            desc += details.expected;
-            desc += ' result: ';
-            desc += details.actual;
+    var ltrim = function (str) {
+        return str.replace(/^\s+/, '');
+    };
+
+    var addSeparatorTo = function (desc) {
+        if (desc) {
+            desc += ', ';
         }
         return desc;
     };
 
-    qu.tap.moduleStart = function(arg) {
-        var name = (typeof arg === 'string') ? arg : arg.name;
-        qu.tap.puts('# module: ' + name);
+    var appendDetailsTo = function (desc, details) {
+        if (!qu.tap.showDetailsOnFailure || details.result) {
+            return desc;
+        }
+        if (typeof details.expected !== 'undefined') {
+            desc = addSeparatorTo(desc);
+            desc += 'expected: \'';
+            desc += details.expected;
+            desc += '\' got: \'';
+            desc += details.actual;
+            desc += '\'';
+        }
+        if (typeof details.source === 'string') {
+            desc = addSeparatorTo(desc);
+            desc += 'source: ';
+            desc += ltrim(details.source);
+        }
+        return desc;
     };
 
-    qu.tap.testStart = function(arg) {
-        var name = (typeof arg === 'string') ? arg : arg.name;
-        qu.tap.puts('# test: ' + name);
+    qu.tap.explain = function explain (str) {
+        if (typeof qu.jsDump !== 'undefined' && typeof qu.jsDump.parse === 'function') {
+            return qu.jsDump.parse(str);
+        } else {
+            return str;
+        }
     };
 
-    qu.tap.log = function() {
-        var details, testLine, desc;
+    qu.tap.note = function note (str) {
+        qu.tap.puts(commentAfterLineEnd('# ' + str));
+    };
+
+    qu.tap.diag = function diag (str) {
+        qu.tap.note(str);
+        return false;
+    };
+
+    qu.tap.moduleStart = function (arg) {
+        var name = (typeof arg === 'string') ? arg : arg.name;
+        qu.tap.note('module: ' + name);
+    };
+
+    qu.tap.testStart = function (arg) {
+        var name = (typeof arg === 'string') ? arg : arg.name;
+        qu.tap.note('test: ' + name);
+    };
+
+    qu.tap.log = function () {
+        var details, desc, testLine = '';
         switch (arguments.length) {
         case 1:  // details
             details = arguments[0];
@@ -111,9 +153,13 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
         case 3:  // result, message, details
             details = arguments[2];
             break;
+        default:
+            throw new Error('QUnit-TAP does not support QUnit#log arguments like this.');
         }
-        testLine = (details.result ? 'ok' : 'not ok') +
-            ' ' + (qu.tap.count += 1);
+        if (!details.result) {
+            testLine += 'not ';
+        }
+        testLine += 'ok ' + (qu.tap.count += 1);
         if (details.result && !details.message) {
             qu.tap.puts(testLine);
             return;
@@ -123,20 +169,20 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     };
 
     // prop in arg: failed,passed,total,runtime
-    qu.tap.done = function(arg) {
-        if (! qu.tap.noPlan) {
+    qu.tap.done = function (arg) {
+        if (!qu.tap.noPlan) {
             return;
         }
         qu.tap.puts((initialCount + 1) + '..' + qu.tap.count);
     };
 
-    var addListener = function(target, name, listener) {
+    var addListener = function (target, name, listener) {
         var originalLoggingCallback = target[name];
         if (multipleLoggingCallbacksSupported) {
             originalLoggingCallback(listener);
         } else if (typeof originalLoggingCallback === 'function') {
             // add listener, not replacing former ones.
-            target[name] = function() {
+            target[name] = function () {
                 var args = Array.prototype.slice.apply(arguments);
                 originalLoggingCallback.apply(target, args);
                 listener.apply(target, args);
@@ -149,7 +195,7 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     addListener(qu, 'done', qu.tap.done);
 };
 
-if (typeof exports !== 'undefined' || typeof require !== 'undefined') {
+if (typeof exports !== 'undefined') {
     // exports qunitTap function to CommonJS world
     exports.qunitTap = qunitTap;
 }
