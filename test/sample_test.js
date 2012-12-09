@@ -1,23 +1,23 @@
-test("a basic test example", function() {
-  ok( true, "this test is fine" );
+test("a basic test example", function(assert) {
+  assert.ok( true, "this test is fine" );
   var value = "hello";
-  equal( value, "hello", "We expect value to be hello" );
+  assert.equal( value, "hello", "We expect value to be hello" );
 });
 
 module("Module A");
 
-test("first test within module", function() {
-  ok( true, "all pass" );
+test("first test within module", function(assert) {
+  assert.ok( true, "all pass" );
 });
 
-test("second test within module", function() {
-  ok( true, "all pass" );
+test("second test within module", function(assert) {
+  assert.ok( true, "all pass" );
 });
 
 module("Module B");
 
-test("some other test", function() {
+test("some other test", function(assert) {
   expect(2);
-  equal( true, false, "failing test" );
-  equal( true, true, "passing test" );
+  assert.equal( true, false, "failing test" );
+  assert.equal( true, true, "passing test" );
 });
