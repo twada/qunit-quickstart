@@ -1,5 +1,7 @@
-qunit-quickstart: Simple QUnit + QUnit-TAP + PhantomJS example.
+qunit-quickstart
 ================================
+
+A simple QUnit + QUnit-TAP + PhantomJS example.
 
 USAGE
 ---------------------------------------
