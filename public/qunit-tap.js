@@ -2,9 +2,9 @@
  * QUnit-TAP - A TAP Output Producer Plugin for QUnit
  *
  * https://github.com/twada/qunit-tap
- * version: 1.2.2
+ * version: 1.3.0
  *
- * Copyright (c) 2010, 2011, 2012 Takuto Wada
+ * Copyright (c) 2010-2013 Takuto Wada
  * Dual licensed under the MIT and GPLv2 licenses.
  *   https://raw.github.com/twada/qunit-tap/master/MIT-LICENSE.txt
  *   https://raw.github.com/twada/qunit-tap/master/GPL-LICENSE.txt
@@ -22,10 +22,11 @@
  * @param qunitObject QUnit object reference.
  * @param printLikeFunction print-like function for TAP output (assumes line-separator is added by this function for each call).
  * @param options configuration options to customize default behavior.
+ * @return object to provide QUnit-TAP API and customization subject.
  */
 var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     'use strict';
-    var qunitTapVersion = '1.2.2',
+    var qunitTapVersion = '1.3.0',
         detailsExtractor,
         tap = {},
         qu = qunitObject;
@@ -35,9 +36,6 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     }
     if (typeof printLikeFunction !== 'function') {
         throw new Error('should pass print-like function');
-    }
-    if (typeof qu.tap !== 'undefined') {
-        return;
     }
 
     // borrowed from qunit.js
@@ -70,7 +68,6 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     tap.config = extend(
         {
             initialCount: 1,
-            noPlan: false,
             showModuleNameOnFailure: true,
             showTestNameOnFailure: true,
             showExpectationOnFailure: true,
@@ -78,6 +75,10 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
         },
         options
     );
+    deprecateOption('noPlan', function (flag) {
+        printLikeFunction('# Now QUnit-TAP works as with "noPlan: true" by default. If you want to delare plan explicitly, please use "QUnit.config.requireExpects" option instead.');
+        tap.config.noPlan = flag;
+    });
     deprecateOption('count', function (count) {
         tap.config.initialCount = (count + 1);
     });
@@ -90,6 +91,11 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     tap.VERSION = qunitTapVersion;
     tap.puts = printLikeFunction;
     tap.count = tap.config.initialCount - 1;
+    tap.expectedCount = tap.config.initialCount - 1;
+
+    var isPlanRequired = function (conf) {
+        return (typeof conf !== 'undefined' && typeof conf.requireExpects !== 'undefined' && conf.requireExpects);
+    };
 
     var isPassed = function (details) {
         return !!(details.result);
@@ -195,6 +201,10 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
         return detailsExtractor(logArguments);
     };
 
+    var printPlanLine = function (toCount) {
+        tap.puts(tap.config.initialCount + '..' + toCount);
+    };
+
     tap.explain = explain;
 
     tap.note = function note (obj) {
@@ -227,12 +237,22 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
         tap.puts(formatTestLine(testLine, formatDetails(details)));
     };
 
+    // prop in arg: name,module,failed,passed,total
+    tap.testDone = function testDone (arg) {
+        if (isPlanRequired(qu.config)) {
+            tap.expectedCount += qu.config.current.expected;
+        }
+    };
+
     // prop in arg: failed,passed,total,runtime
     tap.done = function done (arg) {
-        if (!tap.config.noPlan) {
-            return;
+        if (typeof tap.config.noPlan !== 'undefined' && !(tap.config.noPlan)) {
+            // Do nothing until removal of 'noPlan' option.
+        } else if (isPlanRequired(qu.config)) {
+            printPlanLine(tap.expectedCount);
+        } else {
+            printPlanLine(tap.count);
         }
-        tap.puts(tap.config.initialCount + '..' + tap.count);
     };
 
     var addListener = function (config) {
@@ -241,6 +261,7 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
                 (typeof config !== 'undefined' &&
                  typeof config.log !== 'undefined' &&
                  typeof config.done !== 'undefined' &&
+                 typeof config.testDone !== 'undefined' &&
                  typeof config.moduleStart !== 'undefined' &&
                  typeof config.testStart !== 'undefined'),
             slice = Array.prototype.slice;
@@ -248,7 +269,7 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
             var originalLoggingCallback = subject[event];
             if (isMultipleLoggingCallbacksSupported) {
                 originalLoggingCallback(function () {
-                    // make listener methods (moduleStart,testStart,log,done) overridable.
+                    // make listener methods (moduleStart,testStart,log, ...) overridable.
                     observer[event].apply(observer, slice.apply(arguments));
                 });
             } else if (typeof originalLoggingCallback === 'function') {
@@ -264,10 +285,10 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
     addListener(qu, tap, 'moduleStart');
     addListener(qu, tap, 'testStart');
     addListener(qu, tap, 'log');
+    addListener(qu, tap, 'testDone');
     addListener(qu, tap, 'done');
 
-    // using QUnit.tap as namespace.
-    qu.tap = tap;
+    return tap;
 };
 
 /*global exports:false*/
