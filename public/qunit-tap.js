@@ -2,7 +2,7 @@
  * QUnit-TAP - A TAP Output Producer Plugin for QUnit
  *
  * https://github.com/twada/qunit-tap
- * version: 1.3.0
+ * version: 1.4.0
  *
  * Copyright (c) 2010-2013 Takuto Wada
  * Dual licensed under the MIT and GPLv2 licenses.
@@ -18,28 +18,26 @@
  *   Copyright (c) 2005-2010 Sam Stephenson
  *   Released under the MIT license.
  *   http://prototypejs.org
- *
- * @param qunitObject QUnit object reference.
- * @param printLikeFunction print-like function for TAP output (assumes line-separator is added by this function for each call).
- * @param options configuration options to customize default behavior.
- * @return object to provide QUnit-TAP API and customization subject.
  */
-var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
+(function (root, factory) {
     'use strict';
-    var qunitTapVersion = '1.3.0',
-        detailsExtractor,
-        tap = {},
-        qu = qunitObject;
 
-    if (!qu) {
-        throw new Error('should pass QUnit object reference. Please check QUnit\'s "require" path if you are using Node.js (or any CommonJS env).');
+    // using returnExports UMD pattern
+    if (typeof define === 'function' && define.amd) {
+        define(factory);
+    } else if (typeof exports === 'object') {
+        module.exports = factory();
+    } else {
+        root.qunitTap = factory();
     }
-    if (typeof printLikeFunction !== 'function') {
-        throw new Error('should pass print-like function');
-    }
+}(this, function () {
+    'use strict';
+
+    var qunitTapVersion = '1.4.0',
+        slice = Array.prototype.slice;
 
     // borrowed from qunit.js
-    var extend = function (a, b) {
+    function extend (a, b) {
         var prop;
         for (prop in b) {
             if (b.hasOwnProperty(prop)) {
@@ -51,248 +49,330 @@ var qunitTap = function qunitTap(qunitObject, printLikeFunction, options) {
             }
         }
         return a;
-    };
+    }
 
-    // option deprecation and fallback function
-    var deprecateOption = function (optionName, fallback) {
-        if (!options || typeof options !== 'object') {
-            return;
+    function indexOf (ary, element) {
+        var i;
+        for (i = 0; i < ary.length; i += 1) {
+            if (ary[i] === element) {
+                return i;
+            }
         }
-        if (typeof options[optionName] === 'undefined') {
-            return;
+        return -1;
+    }
+
+    function removeElement (ary, element) {
+        var index = indexOf(ary, element);
+        if (index !== -1) {
+            return ary.splice(index, 1);
+        } else {
+            return [];
         }
-        printLikeFunction('# WARNING: Option "' + optionName + '" is deprecated and will be removed in future version.');
-        fallback(options[optionName]);
-    };
+    }
 
-    tap.config = extend(
-        {
-            initialCount: 1,
-            showModuleNameOnFailure: true,
-            showTestNameOnFailure: true,
-            showExpectationOnFailure: true,
-            showSourceOnFailure: true
-        },
-        options
-    );
-    deprecateOption('noPlan', function (flag) {
-        printLikeFunction('# Now QUnit-TAP works as with "noPlan: true" by default. If you want to delare plan explicitly, please use "QUnit.config.requireExpects" option instead.');
-        tap.config.noPlan = flag;
-    });
-    deprecateOption('count', function (count) {
-        tap.config.initialCount = (count + 1);
-    });
-    deprecateOption('showDetailsOnFailure', function (flag) {
-        tap.config.showModuleNameOnFailure = flag;
-        tap.config.showTestNameOnFailure = flag;
-        tap.config.showExpectationOnFailure = flag;
-        tap.config.showSourceOnFailure = flag;
-    });
-    tap.VERSION = qunitTapVersion;
-    tap.puts = printLikeFunction;
-    tap.count = tap.config.initialCount - 1;
-    tap.expectedCount = tap.config.initialCount - 1;
-
-    var isPlanRequired = function (conf) {
+    function isPlanRequired (conf) {
         return (typeof conf !== 'undefined' && typeof conf.requireExpects !== 'undefined' && conf.requireExpects);
-    };
+    }
 
-    var isPassed = function (details) {
+    function isPassed (details) {
         return !!(details.result);
-    };
+    }
 
-    var isFailed = function (details) {
+    function isFailed (details) {
         return !(isPassed(details));
-    };
+    }
 
-    var isAssertOkFailed = function (details) {
+    function isAssertOkFailed (details) {
         return isFailed(details) && typeof details.expected === 'undefined' && typeof details.actual === 'undefined';
-    };
+    }
 
     // borrowed from prototype.js
     // not required since QUnit.log receives raw data (details). see jquery/qunit@c2cde34
-    var stripTags = function (str) {
+    function stripTags (str) {
         if (!str) {
             return str;
         }
         return str.replace(/<\w+(\s+("[^"]*"|'[^']*'|[^>])+)?>|<\/\w+>/gi, '');
-    };
-
-    var escapeLineEndings = function (str) {
-        return str.replace(/(\r?\n)/g, '$&# ');
-    };
-
-    var ltrim = function (str) {
-        return str.replace(/^\s+/, '');
-    };
-
-    var quote = function (obj) {
-        return '\'' + obj + '\'';
-    };
-
-    var noop = function (obj) {
-        return obj;
-    };
-
-    var explain = noop;
-    if (typeof qu.jsDump !== 'undefined' && typeof qu.jsDump.parse === 'function') {
-        explain = function (obj) {
-            return qu.jsDump.parse(obj);
-        };
     }
 
-    var render = function (desc, fieldName, fieldValue, formatter) {
-        desc.push(fieldName + ': ' + formatter(fieldValue));
-    };
+    function escapeLineEndings (str) {
+        return str.replace(/(\r?\n)/g, '$&# ');
+    }
 
-    var renderIf = function (configName, desc, fieldName, fieldValue, formatter) {
-        if (!tap.config[configName] || typeof fieldValue === 'undefined') {
+    function ltrim (str) {
+        return str.replace(/^\s+/, '');
+    }
+
+    function noop (obj) {
+        return obj;
+    }
+
+    function render (desc, fieldName, fieldValue, formatter) {
+        desc.push(fieldName + ': ' + formatter(fieldValue));
+    }
+
+    function renderIf (shouldRender, desc, fieldName, fieldValue, formatter) {
+        if (!shouldRender || typeof fieldValue === 'undefined') {
             return;
         }
         render(desc, fieldName, fieldValue, formatter);
-    };
+    }
 
-    var formatDetails = function (details) {
-        if (isPassed(details)) {
-            return details.message;
-        }
-        var desc = [];
-        if (details.message) {
-            desc.push(details.message);
-        }
-        if (tap.config.showExpectationOnFailure && !(isAssertOkFailed(details))) {
-            render(desc, 'expected', details.expected, explain);
-            render(desc, 'got', details.actual, explain);
-        }
-        renderIf('showTestNameOnFailure', desc, 'test', details.name, noop);
-        renderIf('showModuleNameOnFailure', desc, 'module', details.module, noop);
-        renderIf('showSourceOnFailure', desc, 'source', details.source, ltrim);
-        return desc.join(', ');
-    };
-
-    var formatTestLine = function (testLine, rest) {
+    function formatTestLine (testLine, rest) {
         if (!rest) {
             return testLine;
         }
         return testLine + ' - ' + escapeLineEndings(rest);
-    };
+    }
 
-    var setupExtractor = function (logArguments) {
-        switch (logArguments.length) {
-        case 1:  // details
-            detailsExtractor = function (args) { return args[0]; };
-            break;
-        case 2:  // result, message(with tags)
-            detailsExtractor = function (args) { return {result: args[0], message: stripTags(args[1])}; };
-            break;
-        case 3:  // result, message, details
-            detailsExtractor = function (args) { return args[2]; };
-            break;
-        default:
-            throw new Error('QUnit-TAP does not support QUnit#log arguments like this.');
+    var extractDetailsFrom = (function () {
+        var detailsExtractor;
+
+        function setupExtractor (logArguments) {
+            switch (logArguments.length) {
+            case 1:  // details
+                detailsExtractor = function (args) { return args[0]; };
+                break;
+            case 2:  // result, message(with tags)
+                detailsExtractor = function (args) { return {result: args[0], message: stripTags(args[1])}; };
+                break;
+            case 3:  // result, message, details
+                detailsExtractor = function (args) { return args[2]; };
+                break;
+            default:
+                throw new Error('QUnit-TAP does not support QUnit#log arguments like this.');
+            }
         }
-    };
 
-    var extractDetailsFrom = function (logArguments) {
-        if (detailsExtractor) {
+        return function (logArguments) {
+            if (detailsExtractor) {
+                return detailsExtractor(logArguments);
+            }
+            setupExtractor(logArguments);
             return detailsExtractor(logArguments);
-        }
-        setupExtractor(logArguments);
-        return detailsExtractor(logArguments);
-    };
+        };
+    })();
 
-    var printPlanLine = function (toCount) {
-        tap.puts(tap.config.initialCount + '..' + toCount);
-    };
-
-    tap.explain = explain;
-
-    tap.note = function note (obj) {
-        tap.puts(escapeLineEndings('# ' + obj));
-    };
-
-    tap.diag = function diag (obj) {
-        tap.note(obj);
-        return false;
-    };
-
-    tap.moduleStart = function moduleStart (arg) {
-        var name = (typeof arg === 'string') ? arg : arg.name;
-        tap.note('module: ' + name);
-    };
-
-    tap.testStart = function testStart (arg) {
-        var name = (typeof arg === 'string') ? arg : arg.name;
-        tap.note('test: ' + name);
-    };
-
-    tap.log = function log () {
-        var details = extractDetailsFrom(arguments),
-            testLine = '';
-        tap.count += 1;
-        if (isFailed(details)) {
-            testLine += 'not ';
-        }
-        testLine += ('ok ' + tap.count);
-        tap.puts(formatTestLine(testLine, formatDetails(details)));
-    };
-
-    // prop in arg: name,module,failed,passed,total
-    tap.testDone = function testDone (arg) {
-        if (isPlanRequired(qu.config)) {
-            tap.expectedCount += qu.config.current.expected;
-        }
-    };
-
-    // prop in arg: failed,passed,total,runtime
-    tap.done = function done (arg) {
-        if (typeof tap.config.noPlan !== 'undefined' && !(tap.config.noPlan)) {
-            // Do nothing until removal of 'noPlan' option.
-        } else if (isPlanRequired(qu.config)) {
-            printPlanLine(tap.expectedCount);
-        } else {
-            printPlanLine(tap.count);
-        }
-    };
-
-    var addListener = function (config) {
+    var createCallbackAppenderFor = function (qu) {
         // detect QUnit's multipleCallbacks feature. see jquery/qunit@34f6bc1
         var isMultipleLoggingCallbacksSupported =
-                (typeof config !== 'undefined' &&
-                 typeof config.log !== 'undefined' &&
-                 typeof config.done !== 'undefined' &&
-                 typeof config.testDone !== 'undefined' &&
-                 typeof config.moduleStart !== 'undefined' &&
-                 typeof config.testStart !== 'undefined'),
-            slice = Array.prototype.slice;
+                (typeof qu.config !== 'undefined' &&
+                 typeof qu.config.log !== 'undefined' &&
+                 typeof qu.config.done !== 'undefined' &&
+                 typeof qu.config.testDone !== 'undefined' &&
+                 typeof qu.config.moduleStart !== 'undefined' &&
+                 typeof qu.config.testStart !== 'undefined');
         return function (subject, observer, event) {
-            var originalLoggingCallback = subject[event];
+            var originalLoggingCallback = subject[event],
+                callback;
             if (isMultipleLoggingCallbacksSupported) {
-                originalLoggingCallback(function () {
+                callback = function () {
                     // make listener methods (moduleStart,testStart,log, ...) overridable.
                     observer[event].apply(observer, slice.apply(arguments));
-                });
+                };
+                originalLoggingCallback(callback);
             } else if (typeof originalLoggingCallback === 'function') {
                 // do not overwrite old-style logging callbacks
-                subject[event] = function () {
+                callback = function () {
                     var args = slice.apply(arguments);
                     originalLoggingCallback.apply(subject, args);
                     observer[event].apply(observer, args);
                 };
+                subject[event] = callback;
+            }
+            return callback;
+        };
+    };
+
+
+    /**
+     * QUnit-TAP - A TAP Output Producer Plugin for QUnit
+     * @param qunitObject QUnit object reference.
+     * @param printLikeFunction print-like function for TAP output (assumes line-separator is added by this function for each call).
+     * @param options configuration options to customize default behavior.
+     * @return object to provide QUnit-TAP API and customization subject.
+     */
+    function qunitTap(qunitObject, printLikeFunction, options) {
+        if (!qunitObject) {
+            throw new Error('should pass QUnit object reference. Please check QUnit\'s "require" path if you are using Node.js (or any CommonJS env).');
+        } else if (typeof printLikeFunction !== 'function') {
+            throw new Error('should pass print-like function');
+        }
+
+        var qu = qunitObject,
+            tap = {},
+            jsDumpExists = (typeof qu.jsDump !== 'undefined' && typeof qu.jsDump.parse === 'function'),
+            explain = (jsDumpExists ? function explain (obj) { return qu.jsDump.parse(obj); } : noop),
+            deprecateOption = function deprecateOption (optionName, fallback) {
+                // option deprecation and fallback function
+                if (!options || typeof options !== 'object') {
+                    return;
+                }
+                if (typeof options[optionName] === 'undefined') {
+                    return;
+                }
+                printLikeFunction('# WARNING: Option "' + optionName + '" is deprecated and will be removed in future version.');
+                fallback(options[optionName]);
+            },
+            targetEvents = [
+                'moduleStart',
+                'testStart',
+                'log',
+                'testDone',
+                'done'
+            ],
+            registeredCallbacks = {};
+
+
+        tap.config = extend(
+            {
+                initialCount: 1,
+                showModuleNameOnFailure: true,
+                showTestNameOnFailure: true,
+                showExpectationOnFailure: true,
+                showSourceOnFailure: true
+            },
+            options
+        );
+        deprecateOption('noPlan', function (flag) {
+            printLikeFunction('# Now QUnit-TAP works as with "noPlan: true" by default. If you want to delare plan explicitly, please use "QUnit.config.requireExpects" option instead.');
+            tap.config.noPlan = flag;
+        });
+        deprecateOption('count', function (count) {
+            tap.config.initialCount = (count + 1);
+        });
+        deprecateOption('showDetailsOnFailure', function (flag) {
+            tap.config.showModuleNameOnFailure = flag;
+            tap.config.showTestNameOnFailure = flag;
+            tap.config.showExpectationOnFailure = flag;
+            tap.config.showSourceOnFailure = flag;
+        });
+        tap.VERSION = qunitTapVersion;
+        tap.puts = printLikeFunction;
+        tap.count = tap.config.initialCount - 1;
+        tap.expectedCount = tap.config.initialCount - 1;
+
+        function isEnabled (configName) {
+            return tap.config[configName];
+        }
+
+        function formatDetails (details) {
+            if (isPassed(details)) {
+                return details.message;
+            }
+            var desc = [];
+            if (details.message) {
+                desc.push(details.message);
+            }
+            if (isEnabled('showExpectationOnFailure') && !(isAssertOkFailed(details))) {
+                render(desc, 'expected', details.expected, explain);
+                render(desc, 'got', details.actual, explain);
+            }
+            renderIf(isEnabled('showTestNameOnFailure'), desc, 'test', details.name, noop);
+            renderIf(isEnabled('showModuleNameOnFailure'), desc, 'module', details.module, noop);
+            renderIf(isEnabled('showSourceOnFailure'), desc, 'source', details.source, ltrim);
+            return desc.join(', ');
+        }
+
+        function printPlanLine (toCount) {
+            tap.puts(tap.config.initialCount + '..' + toCount);
+        }
+
+        function unsubscribeEvent (eventName) {
+            var listeners;
+            if (indexOf(targetEvents, eventName) === -1) {
+                return;
+            }
+            listeners = qu.config[eventName];
+            if (typeof listeners === 'undefined') {
+                return;
+            }
+            removeElement(listeners, registeredCallbacks[eventName]);
+        }
+
+        function unsubscribeEvents (eventNames) {
+            var i;
+            for (i = 0; i < eventNames.length; i += 1) {
+                unsubscribeEvent(eventNames[i]);
+            }
+        }
+
+        tap.explain = explain;
+
+        tap.note = function note (obj) {
+            tap.puts(escapeLineEndings('# ' + obj));
+        };
+
+        tap.diag = function diag (obj) {
+            tap.note(obj);
+            return false;
+        };
+
+        tap.moduleStart = function moduleStart (arg) {
+            var name = (typeof arg === 'string') ? arg : arg.name;
+            tap.note('module: ' + name);
+        };
+
+        tap.testStart = function testStart (arg) {
+            var name = (typeof arg === 'string') ? arg : arg.name;
+            tap.note('test: ' + name);
+        };
+
+        tap.log = function log () {
+            var details = extractDetailsFrom(arguments),
+                testLine = '';
+            tap.count += 1;
+            if (isFailed(details)) {
+                testLine += 'not ';
+            }
+            testLine += ('ok ' + tap.count);
+            tap.puts(formatTestLine(testLine, formatDetails(details)));
+        };
+
+        tap.testDone = function testDone () {
+            if (isPlanRequired(qu.config)) {
+                tap.expectedCount += qu.config.current.expected;
             }
         };
-    }(qu.config);
-    addListener(qu, tap, 'moduleStart');
-    addListener(qu, tap, 'testStart');
-    addListener(qu, tap, 'log');
-    addListener(qu, tap, 'testDone');
-    addListener(qu, tap, 'done');
 
-    return tap;
-};
+        tap.done = function done () {
+            if (typeof tap.config.noPlan !== 'undefined' && !(tap.config.noPlan)) {
+                // Do nothing until removal of 'noPlan' option.
+            } else if (isPlanRequired(qu.config)) {
+                printPlanLine(tap.expectedCount);
+            } else {
+                printPlanLine(tap.count);
+            }
+        };
 
-/*global exports:false*/
-if (typeof exports !== 'undefined') {
-    // exports qunitTap function to CommonJS world
-    exports.qunitTap = qunitTap;
-}
+        tap.unsubscribe = function unsubscribe () {
+            if (typeof qu.config === 'undefined') {
+                return;
+            }
+            if (arguments.length === 0) {
+                unsubscribeEvents(targetEvents);
+            } else {
+                unsubscribeEvents(slice.apply(arguments));
+            }
+        };
+
+        (function () {
+            var appendCallback = createCallbackAppenderFor(qu),
+                eventName, i, callback;
+            for (i = 0; i < targetEvents.length; i += 1) {
+                eventName = targetEvents[i];
+                callback = appendCallback(qu, tap, eventName);
+                registeredCallbacks[eventName] = callback;
+            }
+        })();
+
+        return tap;
+    }
+
+    qunitTap.qunitTap = function () {
+        throw new Error('[BC BREAK] Since 1.4.0, QUnit-TAP exports single qunitTap function as module.exports. Therefore, require("qunit-tap") returns qunitTap function itself. Please fix your code if you are using Node.js (or any CommonJS env).');
+    };
+
+    // using substack pattern (export single function)
+    return qunitTap;
+}));
